@@ -234,8 +234,8 @@ function buildTileUrl(tileX, tileY, level) {
  * @param {number} tileX - 瓦片 X 坐标
  * @param {number} tileY - 瓦片 Y 坐标
  * @param {number} level - LOD 级别
- * @param {number} tilesX - X 方向总瓦片数
- * @param {number} tilesY - Y 方向总瓦片数
+ * @param {number} tilesX - 该级别的 X 方向瓦片总数
+ * @param {number} tilesY - 该级别的 Y 方向瓦片总数
  */
 async function loadTile(tileX, tileY, level, tilesX, tilesY) {
   const tileKey = `${level}_${tileX}_${tileY}`;
@@ -271,20 +271,7 @@ async function loadTile(tileX, tileY, level, tilesX, tilesY) {
   updateStatus(`加载瓦片: Level ${level}, Tile (${tileX}, ${tileY})`);
   
   try {
-    // 预加载图片以检查透明度
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = url;
-    
-    img.onload = () => {
-      console.log(`图片加载成功: ${tileKey}, 尺寸: ${img.width}x${img.height}`);
-    };
-    
-    img.onerror = (err) => {
-      console.error(`图片加载失败: ${tileKey}`, err);
-    };
-    
-    // 创建矩形实体，将 PNG 图片作为材质贴在地球上
+    // 直接创建矩形实体，将 PNG 图片作为材质贴在地球上
     const entity = viewer.entities.add({
       name: `Tile_${tileKey}`,
       rectangle: {
@@ -297,11 +284,9 @@ async function loadTile(tileX, tileY, level, tilesX, tilesY) {
         material: new Cesium.ImageMaterialProperty({
           image: url,
           transparent: true,
-          // 如果后端无法设置透明度，可以尝试色彩键（将特定颜色设为透明）
-          // color: Cesium.Color.WHITE.withAlpha(0.8), // 降低整体不透明度
         }),
         height: 0, // 贴在地表
-        // 移除 classificationType，使用标准渲染以支持透明度
+        alpha: 1.0,
       },
     });
     
@@ -321,13 +306,18 @@ async function loadTile(tileX, tileY, level, tilesX, tilesY) {
 }
 
 /**
- * 加载指定点周围的瓦片（3x3 区域）
+ * 加载指定点周围的瓦片（根据 range 参数决定区域大小）
  * @param {number} lon - 中心点经度
  * @param {number} lat - 中心点纬度
  * @param {number} cameraHeight - 相机高度（米）
  */
 async function loadTilesAroundPoint(lon, lat, cameraHeight) {
-  if (performanceStats.isLoading) return; // 防止重复加载
+  console.log(`[loadTilesAroundPoint] 开始加载，isLoading=${performanceStats.isLoading}`);
+  
+  if (performanceStats.isLoading) {
+    console.log(`[loadTilesAroundPoint] 正在加载中，跳过本次请求`);
+    return; // 防止重复加载
+  }
   
   performanceStats.isLoading = true;
   performanceStats.lastLoadStart = Date.now();
@@ -338,13 +328,17 @@ async function loadTilesAroundPoint(lon, lat, cameraHeight) {
   const centerTile = lonLatToTile(lon, lat, lodConfig);
   const { tileX: centerX, tileY: centerY } = centerTile;
   
-  // 加载中心瓦片及周围 3x3 区域的瓦片
-  const range = 4; // 可以调整加载范围
+  // 从配置面板读取加载范围（range: 1=3x3, 2=5x5, 3=7x7）
+  const rangeInput = document.getElementById('rangeInput');
+  const range = rangeInput ? parseInt(rangeInput.value) || 1 : 1;
+  const tileCount = (2 * range + 1) * (2 * range + 1); // 计算总瓦片数
+  
   const loadPromises = [];
   let newTilesCount = 0;
   
   console.log(`LOD Level ${level}: ${tilesX}×${tilesY} = ${tilesX * tilesY} 个瓦片`);
   console.log(`中心瓦片: (${centerX}, ${centerY}), 瓦片大小: ${(360/tilesX).toFixed(2)}° × ${(180/tilesY).toFixed(2)}°`);
+  console.log(`加载范围: ${2*range+1}×${2*range+1} = ${tileCount} 个瓦片`);
   
   for (let dx = -range; dx <= range; dx++) {
     for (let dy = -range; dy <= range; dy++) {
@@ -505,8 +499,7 @@ function previousMonth() {
   timelineState.currentTime = formatTimeString(currentDate);
   document.getElementById('timeInput').value = timelineState.currentTime;
   updateTimeDisplay();
-  clearAllTiles();
-  updateStatus(`时间已更改为: ${timelineState.currentTime}`);
+  clearAllTiles(); // 异步函数，不需要 await
 }
 
 /**
@@ -518,8 +511,7 @@ function nextMonth() {
   timelineState.currentTime = formatTimeString(currentDate);
   document.getElementById('timeInput').value = timelineState.currentTime;
   updateTimeDisplay();
-  clearAllTiles();
-  updateStatus(`时间已更改为: ${timelineState.currentTime}`);
+  clearAllTiles(); // 异步函数，不需要 await
 }
 
 /**
@@ -545,29 +537,37 @@ function applyTime() {
   
   timelineState.currentTime = inputValue;
   updateTimeDisplay();
-  clearAllTiles();
-  updateStatus(`时间已应用: ${timelineState.currentTime}`);
+  clearAllTiles(); // 异步函数，不需要 await
 }
 
 /**
- * 清除所有已加载的瓦片
- * 并在 100ms 后自动重新加载当前视野的瓦片
+ * 清除所有已加载的瓦片（简化版：直接清除）
+ * 立即清除所有旧瓦片，然后加载新时间的瓦片
  */
-function clearAllTiles() {
+async function clearAllTiles() {
+  updateStatus('时间已更改，正在加载新数据...');
+  
+  // 立即清除所有已加载的瓦片
   for (const [key, tile] of loadedTiles.entries()) {
     viewer.entities.remove(tile.entity);
-    loadedTiles.delete(key);
   }
-  updateStatus('已清除所有瓦片，自动重新加载中...');
+  loadedTiles.clear();
   
-  // 自动重新加载当前视野的瓦片
-  setTimeout(() => {
-    const center = viewer.camera.positionCartographic;
-    const lon = Cesium.Math.toDegrees(center.longitude);
-    const lat = Cesium.Math.toDegrees(center.latitude);
-    const height = center.height;
-    loadTilesAroundPoint(lon, lat, height);
-  }, 100);
+  console.log('已清除所有瓦片，准备加载新数据');
+  
+  // 获取当前相机位置
+  const center = viewer.camera.positionCartographic;
+  const lon = Cesium.Math.toDegrees(center.longitude);
+  const lat = Cesium.Math.toDegrees(center.latitude);
+  const height = center.height;
+  
+  // 强制重置 isLoading 状态，允许重新加载
+  performanceStats.isLoading = false;
+  
+  // 加载新时间的瓦片
+  await loadTilesAroundPoint(lon, lat, height, false);
+  
+  updateStatus('数据切换完成');
 }
 
 // ==================== 事件监听器：时间轴按钮 ====================
