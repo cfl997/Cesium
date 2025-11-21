@@ -1,176 +1,217 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
+  <!-- 字符编码设置为 UTF-8 -->
   <meta charset="UTF-8">
+  <!-- 响应式设计：适配移动设备 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- 页面标题 -->
   <title>Cesium LOD 瓦片加载</title>
+  
+  <!-- 页面样式 -->
   <style>
+    /* 全局样式重置 */
     * {
       margin: 0;
       padding: 0;
-      box-sizing: border-box;
+      box-sizing: border-box;  /* 使用 border-box 盒模型 */
     }
+    
+    /* Cesium 容器占满整个页面 */
     html, body, #cesiumContainer {
       width: 100%;
       height: 100%;
       margin: 0;
       padding: 0;
-      overflow: hidden;
+      overflow: hidden;  /* 隐藏滚动条 */
     }
+    /* 左侧信息面板样式 */
     .info-panel {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      background: rgba(42, 42, 42, 0.9);
-      color: white;
-      padding: 15px;
-      border-radius: 8px;
-      font-family: Arial, sans-serif;
-      z-index: 1000;
-      max-width: 350px;
+      position: absolute;       /* 绝对定位 */
+      top: 10px;                /* 距离顶部 10px */
+      left: 10px;               /* 距离左侧 10px */
+      background: rgba(42, 42, 42, 0.9);  /* 半透明深灰色背景 */
+      color: white;             /* 白色文字 */
+      padding: 15px;            /* 内边距 */
+      border-radius: 8px;       /* 圆角 */
+      font-family: Arial, sans-serif;  /* 字体 */
+      z-index: 1000;            /* 层级：确保在最上层 */
+      max-width: 350px;         /* 最大宽度 */
     }
+    /* 信息面板标题样式 */
     .info-panel h3 {
-      margin-bottom: 10px;
-      font-size: 16px;
-      color: #4fc3f7;
+      margin-bottom: 10px;      /* 底部外边距 */
+      font-size: 16px;          /* 字体大小 */
+      color: #4fc3f7;           /* 蓝色标题 */
     }
+    /* 信息面板段落样式 */
     .info-panel p {
-      font-size: 12px;
-      line-height: 1.5;
-      margin-bottom: 5px;
+      font-size: 12px;          /* 字体大小 */
+      line-height: 1.5;         /* 行高 */
+      margin-bottom: 5px;       /* 底部外边距 */
     }
+    /* 状态信息区域样式 */
     .info-panel .status {
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px solid rgba(255, 255, 255, 0.2);
-      font-size: 11px;
-      color: #aaa;
+      margin-top: 10px;         /* 顶部外边距 */
+      padding-top: 10px;        /* 顶部内边距 */
+      border-top: 1px solid rgba(255, 255, 255, 0.2);  /* 顶部边框 */
+      font-size: 11px;          /* 字体大小 */
+      color: #aaa;              /* 灰色文字 */
     }
+    /* 右侧配置面板样式 */
     .config-panel {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background: rgba(42, 42, 42, 0.9);
-      color: white;
-      padding: 15px;
-      border-radius: 8px;
-      font-family: Arial, sans-serif;
-      z-index: 1000;
-      min-width: 200px;
+      position: absolute;       /* 绝对定位 */
+      top: 10px;                /* 距离顶部 10px */
+      right: 10px;              /* 距离右侧 10px */
+      background: rgba(42, 42, 42, 0.9);  /* 半透明深灰色背景 */
+      color: white;             /* 白色文字 */
+      padding: 15px;            /* 内边距 */
+      border-radius: 8px;       /* 圆角 */
+      font-family: Arial, sans-serif;  /* 字体 */
+      z-index: 1000;            /* 层级：确保在最上层 */
+      min-width: 200px;         /* 最小宽度 */
     }
+    /* 配置面板标题样式 */
     .config-panel h3 {
-      margin-bottom: 10px;
-      font-size: 14px;
-      color: #4fc3f7;
+      margin-bottom: 10px;      /* 底部外边距 */
+      font-size: 14px;          /* 字体大小 */
+      color: #4fc3f7;           /* 蓝色标题 */
     }
+    /* 配置面板标签样式 */
     .config-panel label {
-      display: block;
-      font-size: 11px;
-      margin-bottom: 5px;
-      color: #aaa;
+      display: block;           /* 块级元素 */
+      font-size: 11px;          /* 字体大小 */
+      margin-bottom: 5px;       /* 底部外边距 */
+      color: #aaa;              /* 灰色文字 */
     }
+    /* 配置面板输入框样式 */
     .config-panel input {
-      width: 100%;
-      padding: 5px;
-      margin-bottom: 10px;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      color: white;
-      border-radius: 4px;
-      font-size: 12px;
+      width: 100%;              /* 宽度 100% */
+      padding: 5px;             /* 内边距 */
+      margin-bottom: 10px;      /* 底部外边距 */
+      background: rgba(255, 255, 255, 0.1);  /* 半透明白色背景 */
+      border: 1px solid rgba(255, 255, 255, 0.3);  /* 边框 */
+      color: white;             /* 白色文字 */
+      border-radius: 4px;       /* 圆角 */
+      font-size: 12px;          /* 字体大小 */
     }
+    /* 底部时间轴面板样式 */
     .timeline-panel {
-      position: absolute;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(42, 42, 42, 0.95);
-      color: white;
-      padding: 15px 25px;
-      border-radius: 8px;
-      font-family: Arial, sans-serif;
-      z-index: 1000;
-      min-width: 600px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      position: absolute;       /* 绝对定位 */
+      bottom: 20px;             /* 距离底部 20px */
+      left: 50%;                /* 左侧位置 50% */
+      transform: translateX(-50%);  /* 水平居中 */
+      background: rgba(42, 42, 42, 0.95);  /* 半透明深灰色背景 */
+      color: white;             /* 白色文字 */
+      padding: 15px 25px;       /* 内边距 */
+      border-radius: 8px;       /* 圆角 */
+      font-family: Arial, sans-serif;  /* 字体 */
+      z-index: 1000;            /* 层级：确保在最上层 */
+      min-width: 600px;         /* 最小宽度 */
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);  /* 阴影效果 */
     }
+    /* 时间轴面板标题样式 */
     .timeline-panel h3 {
-      margin-bottom: 15px;
-      font-size: 14px;
-      color: #4fc3f7;
-      text-align: center;
+      margin-bottom: 15px;      /* 底部外边距 */
+      font-size: 14px;          /* 字体大小 */
+      color: #4fc3f7;           /* 蓝色标题 */
+      text-align: center;       /* 居中对齐 */
     }
+    /* 时间轴控制区域样式 */
     .timeline-controls {
-      display: flex;
-      align-items: center;
-      gap: 15px;
-      justify-content: center;
+      display: flex;            /* 弹性布局 */
+      align-items: center;      /* 垂直居中对齐 */
+      gap: 15px;                /* 元素间距 */
+      justify-content: center;  /* 水平居中对齐 */
     }
+    /* 时间轴控制标签样式 */
     .timeline-controls label {
-      font-size: 11px;
-      color: #aaa;
-      white-space: nowrap;
+      font-size: 11px;          /* 字体大小 */
+      color: #aaa;              /* 灰色文字 */
+      white-space: nowrap;      /* 不换行 */
     }
+    /* 时间轴输入框样式 */
     .timeline-controls input {
-      padding: 6px 10px;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      color: white;
-      border-radius: 4px;
-      font-size: 12px;
-      width: 80px;
-      text-align: center;
+      padding: 6px 10px;        /* 内边距 */
+      background: rgba(255, 255, 255, 0.1);  /* 半透明白色背景 */
+      border: 1px solid rgba(255, 255, 255, 0.3);  /* 边框 */
+      color: white;             /* 白色文字 */
+      border-radius: 4px;       /* 圆角 */
+      font-size: 12px;          /* 字体大小 */
+      width: 80px;              /* 宽度 */
+      text-align: center;       /* 文字居中 */
     }
+    /* 时间轴按钮样式 */
     .timeline-controls button {
-      padding: 6px 15px;
-      background: #4fc3f7;
-      border: none;
-      color: white;
-      border-radius: 4px;
-      font-size: 12px;
-      cursor: pointer;
-      transition: background 0.3s;
+      padding: 6px 15px;        /* 内边距 */
+      background: #4fc3f7;      /* 蓝色背景 */
+      border: none;             /* 无边框 */
+      color: white;             /* 白色文字 */
+      border-radius: 4px;       /* 圆角 */
+      font-size: 12px;          /* 字体大小 */
+      cursor: pointer;          /* 鼠标指针样式 */
+      transition: background 0.3s;  /* 背景色过渡动画 */
     }
+    /* 时间轴按钮悬停样式 */
     .timeline-controls button:hover {
-      background: #039be5;
+      background: #039be5;      /* 深蓝色背景 */
     }
+    /* 时间显示区域样式 */
     .timeline-display {
-      text-align: center;
-      margin-top: 10px;
-      font-size: 13px;
-      color: #4fc3f7;
-      font-weight: bold;
+      text-align: center;       /* 居中对齐 */
+      margin-top: 10px;         /* 顶部外边距 */
+      font-size: 13px;          /* 字体大小 */
+      color: #4fc3f7;           /* 蓝色文字 */
+      font-weight: bold;        /* 粗体 */
     }
   </style>
 </head>
 <body>
+  <!-- Cesium 3D 地球容器 -->
   <div id="cesiumContainer"></div>
+  
+  <!-- 左侧信息面板 -->
   <div class="info-panel">
     <h3>🌍 LOD 瓦片加载系统</h3>
     <p>自动根据相机位置和高度加载瓦片</p>
     <p>缩放和移动地球即可自动加载</p>
+    <!-- 状态信息显示区域 -->
     <div class="status" id="statusInfo">
       系统初始化中...
     </div>
   </div>
+  
+  <!-- 右侧配置面板 -->
   <div class="config-panel">
     <h3>⚙️ 配置</h3>
     <label>后端地址:</label>
+    <!-- 后端 API 地址输入框 -->
     <input type="text" id="backendUrl" value="http://localhost:4433/api/tile" placeholder="http://localhost:4433/api/tile">
     <label>深度 (depth):</label>
+    <!-- 深度参数输入框 -->
     <input type="number" id="depthInput" value="0" step="0.1">
   </div>
+  
+  <!-- 底部时间轴面板 -->
   <div class="timeline-panel">
     <h3>⏱️ 时间轴</h3>
     <div class="timeline-controls">
       <label>年月:</label>
+      <!-- 时间输入框（YYYYMM 格式） -->
       <input type="text" id="timeInput" value="202401" placeholder="YYYYMM" maxlength="6">
+      <!-- 上月按钮 -->
       <button id="prevMonth">◀ 上月</button>
+      <!-- 下月按钮 -->
       <button id="nextMonth">下月 ▶</button>
+      <!-- 应用按钮 -->
       <button id="applyTime">应用</button>
     </div>
+    <!-- 当前时间显示区域 -->
     <div class="timeline-display" id="timeDisplay">
       当前时间: 2024年01月
     </div>
   </div>
+  
+  <!-- JavaScript 文件由 Webpack 自动注入 -->
 </body>
 </html>

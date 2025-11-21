@@ -8,10 +8,17 @@
     "start:lod": "webpack serve --config webpack.lod.config.js --mode development --open",
     "build:lod": "webpack --config webpack.lod.config.js --mode production"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "cesium",
+    "3d",
+    "webgl",
+    "lod",
+    "tiles",
+    "geospatial"
+  ],
+  "author": "cfl997",
   "license": "ISC",
-  "description": "",
+  "description": "基于 Cesium 的 Web 3D 地球可视化项目，包含 GLB 模型加载和 LOD 瓦片系统",
   "dependencies": {
     "cesium": "^1.135.0"
   },
