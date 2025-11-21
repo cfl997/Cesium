@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cesium LOD 瓦片加载</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body, #cesiumContainer {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    .info-panel {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(42, 42, 42, 0.9);
+      color: white;
+      padding: 15px;
+      border-radius: 8px;
+      font-family: Arial, sans-serif;
+      z-index: 1000;
+      max-width: 350px;
+    }
+    .info-panel h3 {
+      margin-bottom: 10px;
+      font-size: 16px;
+      color: #4fc3f7;
+    }
+    .info-panel p {
+      font-size: 12px;
+      line-height: 1.5;
+      margin-bottom: 5px;
+    }
+    .info-panel .status {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.2);
+      font-size: 11px;
+      color: #aaa;
+    }
+    .config-panel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(42, 42, 42, 0.9);
+      color: white;
+      padding: 15px;
+      border-radius: 8px;
+      font-family: Arial, sans-serif;
+      z-index: 1000;
+      min-width: 200px;
+    }
+    .config-panel h3 {
+      margin-bottom: 10px;
+      font-size: 14px;
+      color: #4fc3f7;
+    }
+    .config-panel label {
+      display: block;
+      font-size: 11px;
+      margin-bottom: 5px;
+      color: #aaa;
+    }
+    .config-panel input {
+      width: 100%;
+      padding: 5px;
+      margin-bottom: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: white;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .timeline-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(42, 42, 42, 0.95);
+      color: white;
+      padding: 15px 25px;
+      border-radius: 8px;
+      font-family: Arial, sans-serif;
+      z-index: 1000;
+      min-width: 600px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .timeline-panel h3 {
+      margin-bottom: 15px;
+      font-size: 14px;
+      color: #4fc3f7;
+      text-align: center;
+    }
+    .timeline-controls {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      justify-content: center;
+    }
+    .timeline-controls label {
+      font-size: 11px;
+      color: #aaa;
+      white-space: nowrap;
+    }
+    .timeline-controls input {
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: white;
+      border-radius: 4px;
+      font-size: 12px;
+      width: 80px;
+      text-align: center;
+    }
+    .timeline-controls button {
+      padding: 6px 15px;
+      background: #4fc3f7;
+      border: none;
+      color: white;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .timeline-controls button:hover {
+      background: #039be5;
+    }
+    .timeline-display {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 13px;
+      color: #4fc3f7;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+  <div class="info-panel">
+    <h3>🌍 LOD 瓦片加载系统</h3>
+    <p>自动根据相机位置和高度加载瓦片</p>
+    <p>缩放和移动地球即可自动加载</p>
+    <div class="status" id="statusInfo">
+      系统初始化中...
+    </div>
+  </div>
+  <div class="config-panel">
+    <h3>⚙️ 配置</h3>
+    <label>后端地址:</label>
+    <input type="text" id="backendUrl" value="http://localhost:4433/api/tile" placeholder="http://localhost:4433/api/tile">
+    <label>深度 (depth):</label>
+    <input type="number" id="depthInput" value="0" step="0.1">
+  </div>
+  <div class="timeline-panel">
+    <h3>⏱️ 时间轴</h3>
+    <div class="timeline-controls">
+      <label>年月:</label>
+      <input type="text" id="timeInput" value="202401" placeholder="YYYYMM" maxlength="6">
+      <button id="prevMonth">◀ 上月</button>
+      <button id="nextMonth">下月 ▶</button>
+      <button id="applyTime">应用</button>
+    </div>
+    <div class="timeline-display" id="timeDisplay">
+      当前时间: 2024年01月
+    </div>
+  </div>
+</body>
+</html>

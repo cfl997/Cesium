@@ -1,0 +1,27 @@
+{
+  "name": "cesium",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "webpack serve --mode development --open",
+    "build": "webpack --mode production",
+    "start:lod": "webpack serve --config webpack.lod.config.js --mode development --open",
+    "build:lod": "webpack --config webpack.lod.config.js --mode production"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "cesium": "^1.135.0"
+  },
+  "devDependencies": {
+    "copy-webpack-plugin": "^13.0.1",
+    "css-loader": "^7.1.2",
+    "html-webpack-plugin": "^5.6.4",
+    "style-loader": "^4.0.0",
+    "webpack": "^5.102.1",
+    "webpack-cli": "^6.0.1",
+    "webpack-dev-server": "^5.2.2"
+  }
+}
