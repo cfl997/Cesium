@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLB 文件检查工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        button {
+            padding: 10px 20px;
+            background: #48b;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+        button:hover {
+            background: #369;
+        }
+        pre {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+        .info {
+            margin: 10px 0;
+            padding: 10px;
+            background: #333;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GLB 文件检查工具</h1>
+        <button onclick="checkGLB()">检查 dp.glb</button>
+        <div id="output"></div>
+    </div>
+
+    <script>
+        async function checkGLB() {
+            const output = document.getElementById('output');
+            output.innerHTML = '<p>正在加载 dp.glb...</p>';
+            
+            try {
+                const response = await fetch('./dp.glb');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const arrayBuffer = await response.arrayBuffer();
+                output.innerHTML += `<div class="info">文件大小: ${arrayBuffer.byteLength} bytes</div>`;
+                
+                // 解析 GLB 文件头
+                const dataView = new DataView(arrayBuffer);
+                const magic = dataView.getUint32(0, true);
+                const version = dataView.getUint32(4, true);
+                const length = dataView.getUint32(8, true);
+                
+                output.innerHTML += `<div class="info">GLB 版本: ${version}</div>`;
+                output.innerHTML += `<div class="info">文件长度: ${length}</div>`;
+                
+                // 解析 JSON chunk
+                const jsonChunkLength = dataView.getUint32(12, true);
+                const jsonChunkType = dataView.getUint32(16, true);
+                
+                const jsonData = new TextDecoder().decode(
+                    new Uint8Array(arrayBuffer, 20, jsonChunkLength)
+                );
+                const gltf = JSON.parse(jsonData);
+                
+                output.innerHTML += '<h2>GLTF 结构信息</h2>';
+                output.innerHTML += `<div class="info">网格数量: ${gltf.meshes ? gltf.meshes.length : 0}</div>`;
+                output.innerHTML += `<div class="info">材质数量: ${gltf.materials ? gltf.materials.length : 0}</div>`;
+                output.innerHTML += `<div class="info">纹理数量: ${gltf.textures ? gltf.textures.length : 0}</div>`;
+                output.innerHTML += `<div class="info">图像数量: ${gltf.images ? gltf.images.length : 0}</div>`;
+                output.innerHTML += `<div class="info">访问器数量: ${gltf.accessors ? gltf.accessors.length : 0}</div>`;
+                
+                // 检查材质
+                if (gltf.materials && gltf.materials.length > 0) {
+                    output.innerHTML += '<h2>材质信息</h2>';
+                    gltf.materials.forEach((material, index) => {
+                        output.innerHTML += `<div class="info">
+                            <strong>材质 ${index}: ${material.name || 'unnamed'}</strong><br>
+                            PBR金属粗糙度: ${material.pbrMetallicRoughness ? '是' : '否'}<br>
+                            ${material.pbrMetallicRoughness ? 
+                                `基础颜色纹理: ${material.pbrMetallicRoughness.baseColorTexture ? '有 (索引: ' + material.pbrMetallicRoughness.baseColorTexture.index + ')' : '无'}<br>
+                                基础颜色因子: ${material.pbrMetallicRoughness.baseColorFactor ? JSON.stringify(material.pbrMetallicRoughness.baseColorFactor) : '默认'}` 
+                                : ''}
+                        </div>`;
+                    });
+                }
+                
+                // 检查纹理
+                if (gltf.textures && gltf.textures.length > 0) {
+                    output.innerHTML += '<h2>纹理信息</h2>';
+                    gltf.textures.forEach((texture, index) => {
+                        output.innerHTML += `<div class="info">
+                            纹理 ${index}: 图像索引 ${texture.source}
+                        </div>`;
+                    });
+                }
+                
+                // 检查图像
+                if (gltf.images && gltf.images.length > 0) {
+                    output.innerHTML += '<h2>图像信息</h2>';
+                    gltf.images.forEach((image, index) => {
+                        output.innerHTML += `<div class="info">
+                            图像 ${index}: ${image.name || 'unnamed'}<br>
+                            MIME类型: ${image.mimeType || '未指定'}<br>
+                            缓冲区视图: ${image.bufferView !== undefined ? image.bufferView : 'URI: ' + image.uri}
+                        </div>`;
+                    });
+                }
+                
+                // 显示完整的 GLTF JSON
+                output.innerHTML += '<h2>完整 GLTF JSON</h2>';
+                output.innerHTML += '<pre>' + JSON.stringify(gltf, null, 2) + '</pre>';
+                
+            } catch (error) {
+                output.innerHTML += `<div class="info" style="background: #a33;">错误: ${error.message}</div>`;
+                console.error('检查GLB失败:', error);
+            }
+        }
+    </script>
+</body>
+</html>

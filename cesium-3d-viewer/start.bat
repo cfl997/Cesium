@@ -1,0 +1,6 @@
+@echo off
+echo 启动 Cesium 3D 模型展示项目...
+echo.
+echo 正在启动开发服务器...
+npm start
+pause

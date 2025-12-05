@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLB 路径修复工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        button {
+            padding: 10px 20px;
+            background: #48b;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #369;
+        }
+        .info {
+            background: #333;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .success {
+            background: #3a3;
+        }
+        .error {
+            background: #a33;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GLB 纹理路径修复工具</h1>
+        <div class="info">
+            这个工具会修改 dp.glb，将纹理路径从 "top.png" 改为 "./top.png"，
+            这样 Cesium 可以正确找到纹理文件。
+        </div>
+        
+        <button onclick="fixGLB()">修复 dp.glb 纹理路径</button>
+        <button onclick="downloadFixed()">下载修复后的文件</button>
+        
+        <div id="output"></div>
+    </div>
+
+    <script>
+        let fixedGLB = null;
+
+        async function fixGLB() {
+            const output = document.getElementById('output');
+            output.innerHTML = '<p>正在处理...</p>';
+            
+            try {
+                const response = await fetch('./dp.glb');
+                const arrayBuffer = await response.arrayBuffer();
+                
+                // 解析 GLB
+                const dataView = new DataView(arrayBuffer);
+                const jsonChunkLength = dataView.getUint32(12, true);
+                
+                const jsonData = new TextDecoder().decode(
+                    new Uint8Array(arrayBuffer, 20, jsonChunkLength)
+                );
+                const gltf = JSON.parse(jsonData);
+                
+                output.innerHTML += '<div class="info">原始图像路径:</div>';
+                if (gltf.images) {
+                    gltf.images.forEach((img, idx) => {
+                        output.innerHTML += `<div class="info">图像 ${idx}: ${img.uri}</div>`;
+                        // 修改路径
+                        if (img.uri === 'top.png') {
+                            img.uri = './top.png';
+                            output.innerHTML += `<div class="info success">✓ 已修改为: ${img.uri}</div>`;
+                        }
+                    });
+                }
+                
+                // 重新打包 GLB
+                const newJsonString = JSON.stringify(gltf);
+                const newJsonBuffer = new TextEncoder().encode(newJsonString);
+                
+                // 计算填充
+                const jsonPadding = (4 - (newJsonBuffer.length % 4)) % 4;
+                const newJsonLength = newJsonBuffer.length + jsonPadding;
+                
+                // 获取二进制数据（如果有）
+                const binaryChunkStart = 20 + jsonChunkLength;
+                const binaryData = arrayBuffer.byteLength > binaryChunkStart 
+                    ? new Uint8Array(arrayBuffer, binaryChunkStart)
+                    : new Uint8Array(0);
+                
+                // 创建新的 GLB
+                const newGLBLength = 12 + 8 + newJsonLength + (binaryData.length > 0 ? 8 + binaryData.length : 0);
+                const newGLB = new ArrayBuffer(newGLBLength);
+                const newView = new DataView(newGLB);
+                
+                // GLB header
+                newView.setUint32(0, 0x46546C67, true); // magic
+                newView.setUint32(4, 2, true); // version
+                newView.setUint32(8, newGLBLength, true); // length
+                
+                // JSON chunk header
+                newView.setUint32(12, newJsonLength, true);
+                newView.setUint32(16, 0x4E4F534A, true); // "JSON"
+                
+                // JSON data
+                const newGLBArray = new Uint8Array(newGLB);
+                newGLBArray.set(newJsonBuffer, 20);
+                // Add padding
+                for (let i = 0; i < jsonPadding; i++) {
+                    newGLBArray[20 + newJsonBuffer.length + i] = 0x20; // space
+                }
+                
+                // Binary chunk (if exists)
+                if (binaryData.length > 0) {
+                    const binaryStart = 20 + newJsonLength;
+                    newView.setUint32(binaryStart, binaryData.length, true);
+                    newView.setUint32(binaryStart + 4, 0x004E4942, true); // "BIN\0"
+                    newGLBArray.set(binaryData, binaryStart + 8);
+                }
+                
+                fixedGLB = newGLB;
+                output.innerHTML += '<div class="info success">✓ GLB 文件已修复！点击"下载修复后的文件"按钮保存。</div>';
+                
+            } catch (error) {
+                output.innerHTML += `<div class="info error">错误: ${error.message}</div>`;
+                console.error(error);
+            }
+        }
+        
+        function downloadFixed() {
+            if (!fixedGLB) {
+                alert('请先点击"修复 dp.glb 纹理路径"按钮');
+                return;
+            }
+            
+            const blob = new Blob([fixedGLB], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'dp_fixed.glb';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>纹理检查工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        img {
+            max-width: 100%;
+            border: 2px solid #48b;
+            margin: 20px 0;
+            background: repeating-conic-gradient(#808080 0% 25%, #404040 0% 50%) 50% / 20px 20px;
+        }
+        .info {
+            background: #333;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>纹理检查工具</h1>
+        <div class="info">
+            <strong>检查 top.png 纹理</strong><br>
+            如果图片显示为白色或透明，说明纹理本身就是白色的。
+        </div>
+        
+        <h2>top.png 预览</h2>
+        <img src="./top.png" alt="top.png" onload="checkImage(this)" onerror="showError()">
+        
+        <div id="imageInfo"></div>
+    </div>
+
+    <script>
+        function checkImage(img) {
+            const info = document.getElementById('imageInfo');
+            info.innerHTML = `
+                <div class="info">
+                    <strong>图片信息</strong><br>
+                    宽度: ${img.naturalWidth}px<br>
+                    高度: ${img.naturalHeight}px<br>
+                    状态: 加载成功<br><br>
+                    <em>如果上面的图片看起来是白色或透明的，那就是纹理本身的颜色。</em>
+                </div>
+            `;
+            
+            // 分析图片颜色
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            
+            try {
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                
+                let totalR = 0, totalG = 0, totalB = 0, totalA = 0;
+                const pixelCount = data.length / 4;
+                
+                for (let i = 0; i < data.length; i += 4) {
+                    totalR += data[i];
+                    totalG += data[i + 1];
+                    totalB += data[i + 2];
+                    totalA += data[i + 3];
+                }
+                
+                const avgR = Math.round(totalR / pixelCount);
+                const avgG = Math.round(totalG / pixelCount);
+                const avgB = Math.round(totalB / pixelCount);
+                const avgA = Math.round(totalA / pixelCount);
+                
+                info.innerHTML += `
+                    <div class="info">
+                        <strong>平均颜色分析</strong><br>
+                        R (红): ${avgR}<br>
+                        G (绿): ${avgG}<br>
+                        B (蓝): ${avgB}<br>
+                        A (透明度): ${avgA}<br>
+                        <div style="width: 100px; height: 50px; background: rgba(${avgR},${avgG},${avgB},${avgA/255}); border: 1px solid white; margin-top: 10px;"></div>
+                        ${avgR > 200 && avgG > 200 && avgB > 200 ? '<br><strong style="color: #f66;">⚠️ 警告：纹理主要是白色！这就是为什么模型显示为白色。</strong>' : ''}
+                    </div>
+                `;
+            } catch (e) {
+                info.innerHTML += `<div class="info" style="background: #a33;">无法分析图片颜色（可能是 CORS 限制）</div>`;
+            }
+        }
+        
+        function showError() {
+            document.getElementById('imageInfo').innerHTML = `
+                <div class="info" style="background: #a33;">
+                    <strong>错误</strong><br>
+                    无法加载 top.png 文件。请确保文件存在于正确的位置。
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
