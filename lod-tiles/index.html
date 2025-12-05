@@ -36,7 +36,9 @@
       border-radius: 8px;       /* 圆角 */
       font-family: Arial, sans-serif;  /* 字体 */
       z-index: 1000;            /* 层级：确保在最上层 */
-      max-width: 350px;         /* 最大宽度 */
+      max-width: 200px;         /* 最大宽度 */
+      max-height: 90vh;         /* 最大高度 */
+      overflow-y: auto;         /* 垂直滚动 */
     }
     /* 信息面板标题样式 */
     .info-panel h3 {
@@ -164,6 +166,31 @@
       color: #4fc3f7;           /* 蓝色文字 */
       font-weight: bold;        /* 粗体 */
     }
+    /* 数据类型按钮样式 */
+    .data-type-btn {
+      padding: 6px 10px;        /* 内边距 */
+      background: rgba(255, 255, 255, 0.1);  /* 半透明白色背景 */
+      border: 1px solid rgba(255, 255, 255, 0.2);  /* 边框 */
+      color: white;             /* 白色文字 */
+      border-radius: 4px;       /* 圆角 */
+      font-size: 11px;          /* 字体大小 */
+      cursor: pointer;          /* 鼠标指针样式 */
+      transition: all 0.3s;     /* 过渡动画 */
+      text-align: left;         /* 左对齐 */
+      font-family: Arial, sans-serif;  /* 字体 */
+      width: 100%;              /* 宽度 100% */
+    }
+    /* 数据类型按钮悬停样式 */
+    .data-type-btn:hover {
+      background: rgba(79, 195, 247, 0.3);  /* 蓝色半透明背景 */
+      border-color: #4fc3f7;    /* 蓝色边框 */
+    }
+    /* 数据类型按钮激活样式 */
+    .data-type-btn.active {
+      background: #4fc3f7;      /* 蓝色背景 */
+      border-color: #4fc3f7;    /* 蓝色边框 */
+      font-weight: bold;        /* 粗体 */
+    }
   </style>
 </head>
 <body>
@@ -172,11 +199,27 @@
   
   <!-- 左侧信息面板 -->
   <div class="info-panel">
-    <h3>🌍 LOD 瓦片加载系统</h3>
-    <p>自动根据相机位置和高度加载瓦片</p>
-    <p>缩放和移动地球即可自动加载</p>
+    <h3 style="font-size: 14px; margin-bottom: 8px;">环境</h3>
+    
+    <!-- 数据类型选择区域 -->
+    <div style="margin: 10px 0;">
+      <h4 style="font-size: 11px; color: #aaa; margin-bottom: 8px; font-weight: normal;">数据类型</h4>
+      <div id="dataTypeList" style="display: flex; flex-direction: column; gap: 3px;">
+        <button class="data-type-btn active" data-type="to">🌡️ 温度</button>
+        <button class="data-type-btn" data-type="so">🧂 盐度</button>
+        <button class="data-type-btn" data-type="rho">💧 海水密度</button>
+        <button class="data-type-btn" data-type="cs">🌊 洋流</button>
+        <button class="data-type-btn" data-type="zos">📊 海面高度异常</button>
+        <button class="data-type-btn" data-type="ph">⚗️ PH</button>
+        <button class="data-type-btn" data-type="ww">🌬️ 风浪</button>
+        <button class="data-type-btn" data-type="depth">🗺️ 海底地形</button>
+        <button class="data-type-btn" data-type="sediment">🏔️ 底质</button>
+        <button class="data-type-btn" data-type="ssp">🔊 声速</button>
+      </div>
+    </div>
+    
     <!-- 状态信息显示区域 -->
-    <div class="status" id="statusInfo">
+    <div class="status" id="statusInfo" style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.2);">
       系统初始化中...
     </div>
   </div>
@@ -191,8 +234,15 @@
     <!-- 深度参数输入框 -->
     <input type="number" id="depthInput" value="0" step="0.1">
     <label>加载范围 (range):</label>
-    <!-- 加载范围：1=3x3, 2=5x5, 3=7x7 -->
-    <input type="number" id="rangeInput" value="1" min="1" max="5" step="1">
+    <!-- 加载范围：选择网格大小 -->
+    <select id="rangeInput" style="width: 100%; padding: 5px; margin-bottom: 10px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.3); color: white; border-radius: 4px; font-size: 12px;">
+      <option value="2">2x2 (4个瓦片)</option>
+      <option value="3" selected>3x3 (9个瓦片)</option>
+      <option value="4">4x4 (16个瓦片)</option>
+      <option value="5">5x5 (25个瓦片)</option>
+      <option value="6">6x6 (36个瓦片)</option>
+      <option value="7">7x7 (49个瓦片)</option>
+    </select>
   </div>
   
   <!-- 底部时间轴面板 -->

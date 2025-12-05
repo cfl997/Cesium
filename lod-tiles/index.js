@@ -13,8 +13,8 @@ import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 
 // ==================== Cesium Ion 配置 ====================
-// 设置 Cesium ion 访问令牌（如果需要使用 Cesium Ion 的在线资源）
-// Cesium.Ion.defaultAccessToken = 'your_token_here';
+// 禁用 Cesium Ion 访问令牌，实现完全离线
+Cesium.Ion.defaultAccessToken = undefined;
 
 // ==================== 创建 Cesium 视图器 ====================
 // 创建 Cesium Viewer 实例，配置简洁的 UI（隐藏大部分默认控件）
@@ -31,11 +31,18 @@ const viewer = new Cesium.Viewer('cesiumContainer', {
   vrButton: false,                 // 隐藏 VR 按钮
   infoBox: false,                  // 隐藏信息框
   selectionIndicator: false,       // 隐藏选择指示器
+  imageryProvider: false,          // 禁用默认在线底图
 });
 
-// ==================== 底图配置 ====================
-// 保留底图显示（注释掉的代码可以移除所有底图）
-// viewer.imageryLayers.removeAll();
+// ==================== 离线地球底图配置 ====================
+// 移除所有在线底图，使用单色底图作为离线地球
+viewer.imageryLayers.removeAll();
+
+// 设置地球底色为深蓝色（海洋色）
+viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#1a2332');
+
+// 可选：如果需要更暗的背景，可以调整亮度
+viewer.scene.globe.enableLighting = false;
 
 // ==================== 数据有效范围 ====================
 // 数据有效纬度范围（根据实际海洋数据调整，极地区域通常没有数据）
@@ -45,7 +52,7 @@ const DATA_LAT_MAX = 85;  // 北纬 85° 以南
 // ==================== 后端 API 配置参数 ====================
 // 存储后端 API 请求的默认参数
 const config = {
-  ncType: 'so',                                    // 数据类型（so = salinity ocean，海洋盐度）
+  ncType: 'to',                                    // 数据类型（默认：to = 温度）
   timeType: 0,                                     // 时间类型
   backendUrl: 'http://localhost:4433/api/tile',   // 后端 API 地址
   depth: 0,                                        // 深度（米）
@@ -61,6 +68,8 @@ const timelineState = {
 // ==================== 瓦片存储 ====================
 // 存储已加载的瓦片实体，键为 "level_tileX_tileY"，值为瓦片对象
 const loadedTiles = new Map();
+// 存储正在加载的瓦片，避免重复请求
+const loadingTiles = new Set();
 
 // ==================== 性能统计 ====================
 // 统计瓦片加载性能，用于显示在左侧信息面板
@@ -240,22 +249,27 @@ function buildTileUrl(tileX, tileY, level) {
 async function loadTile(tileX, tileY, level, tilesX, tilesY) {
   const tileKey = `${level}_${tileX}_${tileY}`;
   
-  // 如果已经加载过，跳过
-  if (loadedTiles.has(tileKey)) {
+  // 如果已经加载过或正在加载，跳过
+  if (loadedTiles.has(tileKey) || loadingTiles.has(tileKey)) {
     return;
   }
+  
+  // 标记为正在加载
+  loadingTiles.add(tileKey);
   
   const bounds = tileToLonLatBounds(tileX, tileY, tilesX, tilesY);
   
   // 如果瓦片在极地区域外，跳过
   if (!bounds) {
     console.log(`跳过极地瓦片: ${tileKey}`);
+    loadingTiles.delete(tileKey);
     return;
   }
   
   // 验证边界是否有效
   if (bounds.west >= bounds.east || bounds.south >= bounds.north) {
     console.warn(`跳过无效瓦片: ${tileKey}, bounds:`, bounds);
+    loadingTiles.delete(tileKey);
     return;
   }
   
@@ -263,12 +277,11 @@ async function loadTile(tileX, tileY, level, tilesX, tilesY) {
   if (bounds.west < -180 || bounds.east > 180 || 
       bounds.south < -90 || bounds.north > 90) {
     console.warn(`瓦片边界超出范围: ${tileKey}, bounds:`, bounds);
+    loadingTiles.delete(tileKey);
     return;
   }
   
   const url = buildTileUrl(tileX, tileY, level);
-  
-  updateStatus(`加载瓦片: Level ${level}, Tile (${tileX}, ${tileY})`);
   
   try {
     // 直接创建矩形实体，将 PNG 图片作为材质贴在地球上
@@ -297,11 +310,11 @@ async function loadTile(tileX, tileY, level, tilesX, tilesY) {
       tileY,
       lastAccess: Date.now(),
     });
-    
-    updateStatus(`成功加载瓦片: Level ${level}, Tile (${tileX}, ${tileY})`);
   } catch (error) {
     console.error(`加载瓦片失败: ${tileKey}`, error);
-    updateStatus(`加载失败: ${error.message}`);
+  } finally {
+    // 移除加载中标记
+    loadingTiles.delete(tileKey);
   }
 }
 
@@ -312,14 +325,8 @@ async function loadTile(tileX, tileY, level, tilesX, tilesY) {
  * @param {number} cameraHeight - 相机高度（米）
  */
 async function loadTilesAroundPoint(lon, lat, cameraHeight) {
-  console.log(`[loadTilesAroundPoint] 开始加载，isLoading=${performanceStats.isLoading}`);
+  console.log(`[loadTilesAroundPoint] 开始加载`);
   
-  if (performanceStats.isLoading) {
-    console.log(`[loadTilesAroundPoint] 正在加载中，跳过本次请求`);
-    return; // 防止重复加载
-  }
-  
-  performanceStats.isLoading = true;
   performanceStats.lastLoadStart = Date.now();
   
   const lodConfig = getLODLevel(cameraHeight);
@@ -328,33 +335,54 @@ async function loadTilesAroundPoint(lon, lat, cameraHeight) {
   const centerTile = lonLatToTile(lon, lat, lodConfig);
   const { tileX: centerX, tileY: centerY } = centerTile;
   
-  // 从配置面板读取加载范围（range: 1=3x3, 2=5x5, 3=7x7）
+  // 从配置面板读取加载范围（gridSize: 2=2x2, 3=3x3, 4=4x4, 5=5x5, 6=6x6, 7=7x7）
   const rangeInput = document.getElementById('rangeInput');
-  const range = rangeInput ? parseInt(rangeInput.value) || 1 : 1;
-  const tileCount = (2 * range + 1) * (2 * range + 1); // 计算总瓦片数
+  const gridSize = rangeInput ? parseInt(rangeInput.value) || 3 : 3;
+  const tileCount = gridSize * gridSize; // 计算总瓦片数
   
-  const loadPromises = [];
-  let newTilesCount = 0;
+  // 计算半径（用于循环）
+  const halfGrid = Math.floor(gridSize / 2);
   
   console.log(`LOD Level ${level}: ${tilesX}×${tilesY} = ${tilesX * tilesY} 个瓦片`);
   console.log(`中心瓦片: (${centerX}, ${centerY}), 瓦片大小: ${(360/tilesX).toFixed(2)}° × ${(180/tilesY).toFixed(2)}°`);
-  console.log(`加载范围: ${2*range+1}×${2*range+1} = ${tileCount} 个瓦片`);
+  console.log(`加载范围: ${gridSize}×${gridSize} = ${tileCount} 个瓦片`);
   
-  for (let dx = -range; dx <= range; dx++) {
-    for (let dy = -range; dy <= range; dy++) {
+  // 根据网格大小加载瓦片
+  // 对于偶数网格（2x2, 4x4, 6x6），中心点偏移
+  // 对于奇数网格（3x3, 5x5, 7x7），中心点居中
+  const startOffset = gridSize % 2 === 0 ? -halfGrid : -halfGrid;
+  const endOffset = gridSize % 2 === 0 ? halfGrid - 1 : halfGrid;
+  
+  // 收集需要加载的瓦片，并按距离排序（优先加载中心瓦片）
+  const tilesToLoad = [];
+  
+  for (let dx = startOffset; dx <= endOffset; dx++) {
+    for (let dy = startOffset; dy <= endOffset; dy++) {
       const tileX = centerX + dx;
       const tileY = centerY + dy;
       
       // 确保瓦片坐标在有效范围内
       if (tileX >= 0 && tileX < tilesX && tileY >= 0 && tileY < tilesY) {
         const tileKey = `${level}_${tileX}_${tileY}`;
-        if (!loadedTiles.has(tileKey)) {
-          newTilesCount++;
+        // 提前检查，避免不必要的异步调用
+        if (!loadedTiles.has(tileKey) && !loadingTiles.has(tileKey)) {
+          // 计算距离中心的距离（用于排序）
+          const distance = Math.abs(dx) + Math.abs(dy);
+          tilesToLoad.push({ tileX, tileY, distance });
         }
-        loadPromises.push(loadTile(tileX, tileY, level, tilesX, tilesY));
       }
     }
   }
+  
+  // 按距离排序，优先加载中心瓦片
+  tilesToLoad.sort((a, b) => a.distance - b.distance);
+  
+  const newTilesCount = tilesToLoad.length;
+  
+  // 批量加载瓦片（不等待全部完成）
+  const loadPromises = tilesToLoad.map(tile => 
+    loadTile(tile.tileX, tile.tileY, level, tilesX, tilesY)
+  );
   
   await Promise.all(loadPromises);
   
@@ -364,7 +392,6 @@ async function loadTilesAroundPoint(lon, lat, cameraHeight) {
   // 更新性能统计
   performanceStats.currentLoadTime = Date.now() - performanceStats.lastLoadStart;
   performanceStats.totalTilesLoaded += newTilesCount;
-  performanceStats.isLoading = false;
   
   updateStatus(`LOD Level ${level}, 加载 ${newTilesCount} 个新瓦片`);
 }
@@ -406,11 +433,11 @@ function updateStatus(message) {
 }
 
 // ==================== 事件监听器：相机移动 ====================
-// 相机移动结束事件：自动加载瓦片
+// 相机移动结束事件：立即加载瓦片
 let lastCameraUpdate = 0;  // 上次更新时间（用于节流）
 viewer.camera.moveEnd.addEventListener(() => {
   const now = Date.now();
-  if (now - lastCameraUpdate < 300) return; // 节流 300ms
+  if (now - lastCameraUpdate < 1) return; // 极小节流 50ms，仅防止重复触发
   lastCameraUpdate = now;
   
   const center = viewer.camera.positionCartographic;
@@ -420,14 +447,15 @@ viewer.camera.moveEnd.addEventListener(() => {
   
   console.log(`相机位置: 经度=${lon.toFixed(4)}, 纬度=${lat.toFixed(4)}, 高度=${height.toFixed(0)}m`);
   
-  // 自动加载当前视野中心的瓦片
+  // 立即加载当前视野中心的瓦片
   loadTilesAroundPoint(lon, lat, height);
 });
 
-// 相机移动中事件：平滑加载瓦片
+// 相机移动中事件：快速响应
+// 注意：changed 事件触发非常频繁，需要适当节流
 viewer.camera.changed.addEventListener(() => {
   const now = Date.now();
-  if (now - lastCameraUpdate < 1000) return; // 节流 1s
+  if (now - lastCameraUpdate < 1) return; // 较小节流 200ms
   lastCameraUpdate = now;
   
   const center = viewer.camera.positionCartographic;
@@ -586,6 +614,56 @@ document.getElementById('timeInput').addEventListener('keypress', (e) => {
 // ==================== 初始化：时间显示 ====================
 // 初始化时间显示
 updateTimeDisplay();
+
+// ==================== 事件监听器：数据类型切换 ====================
+/**
+ * 数据类型切换功能
+ * 点击左侧数据类型按钮时切换数据类型并重新加载瓦片
+ */
+const dataTypeButtons = document.querySelectorAll('.data-type-btn');
+dataTypeButtons.forEach(button => {
+  button.addEventListener('click', function() {
+    // 移除所有按钮的 active 类
+    dataTypeButtons.forEach(btn => btn.classList.remove('active'));
+    
+    // 添加当前按钮的 active 类
+    this.classList.add('active');
+    
+    // 获取数据类型
+    const newType = this.getAttribute('data-type');
+    const oldType = config.ncType;
+    
+    // 如果类型没有变化，不需要重新加载
+    if (newType === oldType) {
+      return;
+    }
+    
+    // 更新配置
+    config.ncType = newType;
+    
+    // 获取数据类型的中文名称
+    const typeNames = {
+      'to': '温度',
+      'so': '盐度',
+      'rho': '海水密度',
+      'cs': '洋流',
+      'zos': '海面高度异常',
+      'ph': 'PH',
+      'ww': '风浪',
+      'depth': '海底地形',
+      'sediment': '底质',
+      'ssp': '声速'
+    };
+    
+    const typeName = typeNames[newType] || newType;
+    
+    console.log(`数据类型已切换: ${oldType} -> ${newType} (${typeName})`);
+    updateStatus(`正在切换到 ${typeName} 数据...`);
+    
+    // 清除所有瓦片并重新加载
+    clearAllTiles();
+  });
+});
 
 // ==================== 启动完成 ====================
 // 输出启动信息到控制台
